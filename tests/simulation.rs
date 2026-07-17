@@ -11,7 +11,7 @@ use std::collections::{HashMap, VecDeque};
 // Returns a map of node id -> how many times it delivered the message.
 fn run(n: u32, links: u32) -> HashMap<u32, u32> {
     // 1. Create N nodes (ids 0..n). fanout 4 => active view holds up to 5.
-    let mut nodes: HashMap<u32, Node<u32>> = HashMap::new();
+    let mut nodes: HashMap<u32, Node<u32, u64>> = HashMap::new();
     for i in 0..n {
         let mut cfg = Config::new(i);
         cfg.fanout = 4; // active view capacity = fanout + 1 = 5
@@ -28,7 +28,7 @@ fn run(n: u32, links: u32) -> HashMap<u32, u32> {
                 nodes
                     .get_mut(&i)
                     .unwrap()
-                    .handle::<u64>(Message::Join { new_node: peer });
+                    .handle(Message::Join { new_node: peer });
             }
         }
     }

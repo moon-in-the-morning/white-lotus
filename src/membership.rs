@@ -196,8 +196,12 @@ impl<Id: NodeId> Membership<Id> {
 					self.add_to_passive(p);
 				}
 			}
-			// Broadcast dissemination is handled by the gossip layer, not membership.
-			Message::Broadcast { .. } => {}
+			// Broadcast + Plumtree control (IHave/Graft/Prune) are handled by the
+			// gossip layer, not membership.
+			Message::Broadcast { .. }
+			| Message::IHave { .. }
+			| Message::Graft { .. }
+			| Message::Prune { .. } => {}
 		}
 		actions
 	}

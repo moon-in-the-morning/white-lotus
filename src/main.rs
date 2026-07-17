@@ -25,8 +25,8 @@ fn main() {
 
 	// build the node, put the peer into its active view, then share it safely
 	// between the keyboard thread and the network thread with an Arc<Mutex<_>>.
-	let mut node: Node<u32> = Node::new(Config::new(my_id));
-	let _ = node.handle::<Announcement>(Message::Join { new_node: peer_id });
+	let mut node: Node<u32, Announcement> = Node::new(Config::new(my_id));
+	let _ = node.handle(Message::Join { new_node: peer_id });
 	let node = Arc::new(Mutex::new(node));
 
 	// --- keyboard thread: read a typed line, broadcast it ---
@@ -43,7 +43,7 @@ fn main() {
 				if text.trim().is_empty() {
 					continue;
 				}
-				let actions = node.lock().unwrap().broadcast::<Announcement>(text);
+				let actions = node.lock().unwrap().broadcast(text);
 				execute(&actions, &book);
 			}
 		});

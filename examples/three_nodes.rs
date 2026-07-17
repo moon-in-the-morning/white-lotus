@@ -5,9 +5,9 @@ use white_lotus::{Action, Config, Message, Node};
 
 fn main() {
     // --- Node 1: learns about two peers, then originates a broadcast ---
-    let mut node1 = Node::new(Config::new(1u32));
-    node1.handle::<u64>(Message::Join { new_node: 2 });
-    node1.handle::<u64>(Message::Join { new_node: 3 });
+    let mut node1: Node<u32, u64> = Node::new(Config::new(1u32));
+    node1.handle(Message::Join { new_node: 2 });
+    node1.handle(Message::Join { new_node: 3 });
 
     println!("Node 1 broadcasts a file-hash announcement (payload = 42):");
     for action in node1.broadcast(42u64) {
@@ -19,8 +19,8 @@ fn main() {
     }
 
     // --- Node 2: receives that broadcast and reacts ---
-    let mut node2 = Node::new(Config::new(2u32));
-    node2.handle::<u64>(Message::Join { new_node: 4 }); // node 2 knows peer 4
+    let mut node2: Node<u32, u64> = Node::new(Config::new(2u32));
+    node2.handle(Message::Join { new_node: 4 }); // node 2 knows peer 4
 
     println!("\nPeer 2 receives the announcement and reacts:");
     let incoming = Message::Broadcast { origin: 1, seq: 0, sender: 1, hop: 0, payload: 42u64 };

@@ -22,4 +22,10 @@ pub enum Message<Id: NodeId, P:Payload> {
 	ShuffleReplay { peers: Vec<Id> }, 
 	// this is the disseminiation - file hash announcment plus id and hop counter bounded by Confiug max rounds
 	Broadcast { origin: Id, seq: MessageId, sender: Id, hop: u32, payload: P },
+	// Plumtree lazy push: "I have message (origin, seq)" - the id only, not the payload
+	IHave { origin: Id, seq: MessageId, sender: Id },
+	// Plumtree: "send me (origin, seq), and promote this link back to eager"
+	Graft { origin: Id, seq: MessageId, sender: Id },
+	// Plumtree: "you delivered me a duplicate - demote this link to lazy"
+	Prune { sender: Id },
 }

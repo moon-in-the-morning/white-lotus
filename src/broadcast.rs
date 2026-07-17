@@ -2,12 +2,12 @@ use crate::{NodeId, Payload};
 use crate::action::Action;
 use crate::message::{Message, MessageId};
 
-//forward to every peer except sender
-//hop is incoming - sent are the hops plus 1
-//origin + seq travel unchanged so the (origin, seq) id stays globally unique
-pub fn forward<Id: NodeId, P: Payload>(
+// Eager push: send the FULL payload to every eager peer except the sender.
+// hop is the incoming hop count; forwarded copies carry hop + 1.
+// origin + seq travel unchanged so the (origin, seq) id stays globally unique.
+pub fn eager_push<Id: NodeId, P: Payload>(
 	me: Id,
-	active_peers: &[Id],
+	eager_peers: &[Id],
 	exclude: Option<Id>,
 	origin: Id,
 	seq: MessageId,
@@ -15,7 +15,7 @@ pub fn forward<Id: NodeId, P: Payload>(
 	payload: &P,
 ) -> Vec<Action<Id, P>> {
 	let mut actions = Vec::new();
-	for &peer in active_peers {
+	for &peer in eager_peers {
 		if Some(peer) == exclude {
 			continue; // never echo back to the sender
 		}
@@ -27,6 +27,32 @@ pub fn forward<Id: NodeId, P: Payload>(
 				sender: me,
 				hop: hop + 1,
 				payload: payload.clone(),
+			},
+		});
+	}
+	actions
+}
+
+// Lazy push: send just an IHave(id) announcement to every lazy peer except the
+// sender - the cheap "I have this, ask me if you want it" side of Plumtree.
+pub fn lazy_push<Id: NodeId, P: Payload>(
+	me: Id,
+	lazy_peers: &[Id],
+	exclude: Option<Id>,
+	origin: Id,
+	seq: MessageId,
+) -> Vec<Action<Id, P>> {
+	let mut actions = Vec::new();
+	for &peer in lazy_peers {
+		if Some(peer) == exclude {
+			continue;
+		}
+		actions.push(Action::Send {
+			to: peer,
+			msg: Message::IHave {
+				origin,
+				seq,
+				sender: me,
 			},
 		});
 	}
