@@ -9,5 +9,5 @@ pub enum Action<Id: NodeId, P: Payload> {
 //tear down the connection to a peer we removed
 	Disconnect { peer: Id },
 //give recived payload to application
-	deliver { payload: P },
+	Deliver { payload: P },
 }
