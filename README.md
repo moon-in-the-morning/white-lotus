@@ -61,5 +61,10 @@ Membership starts by defining a nodes hyparview membership state: the two and th
 Action.rs
 
  Send carries a whole Message (reusing message.rs) plus who it goes to. Connect/Disconnect manage live links. Deliver hands a received payload up to your app.
+
+Broadcast
+
+HyParView — when you get a message, you shove it to everyone in your active view except whoever just gave it to you.
+
  
  
