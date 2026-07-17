@@ -12,6 +12,7 @@ pub struct Config<Id> {
 	
 	// How many rounds a payload keeps being reshared before it is finished distributing 
 	pub max_rounds: u32,
+	pub passive_capacity: usize,
 }
 
 impl<Id> Config<Id> { 
@@ -22,6 +23,7 @@ impl<Id> Config<Id> {
 			fanout: 3,
 			round_interval: Duration::from_secs(1),
 			max_rounds: 5,
+			passive_capacity: 30,
 		}
 	}
 }

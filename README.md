@@ -66,5 +66,13 @@ Broadcast
 
 HyParView — when you get a message, you shove it to everyone in your active view except whoever just gave it to you.
 
+gossip.rs
+All together now!  
  
- 
+gossip.rs is the conductor that turns all your other files into one working node: it holds a Config (your settings), a Membership (the active/passive peer views), and a "seen" list, then exposes two doors — broadcast() to start spreading a Payload, and handle() to react to an incoming Message. When a message arrives, gossip decides who does the work: broadcast messages it handles itself (skip if already seen, Deliver to the app, then hand off to broadcast.rs to forward to the active peers), while membership messages (Join, Disconnect, etc.) get passed down to membership.rs. Everything it does comes back as a list of Actions, so gossip is the brain that ties config, membership, message, action, and broadcast together without ever touching the network itself.
+
+testing
+example.rs
+
+white-lotus is validated in three complementary layers, mirroring how the HyParView protocol itself was evaluated. First, an integration test suite (tests/simulation.rs) spins up entire networks of nodes — 5, 30, and 40 at a time — inside a single process, wires them into an overlay, broadcasts a message, and asserts that it reaches every node exactly once with no duplicate deliveries; because the protocol logic is pure (each node returns a list of intended actions rather than performing network I/O), we can simulate networks of arbitrary size deterministically and instantly, exactly as Leitão's thesis simulated 10,000 nodes rather than deploying 10,000 machines. Second, a runnable example (examples/three_nodes.rs) exercises the same public API a real user would call and prints the protocol in action, serving simultaneously as living, compiler-checked documentation and as a continuous check that the public interface stays clean and ergonomic. Third, the code is deployed to real Raspberry Pi hardware to validate the connection and serialization layer under genuine network conditions — latency, failures, and churn that simulation cannot fully reproduce — scaling from a handful of devices up to a 40-node fleet. This separation lets simulation prove correctness at scale while hardware proves real-world plumbing, so each layer tests what it is best suited to catch.
+

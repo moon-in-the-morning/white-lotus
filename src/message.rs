@@ -3,6 +3,7 @@ use crate::{NodeId, Payload};
 // unique message id for broadcas
 pub type MessageId = u64;
 
+#[derive(Debug)]
 pub enum Message<Id: NodeId, P:Payload> {
 	// new node - knock knock let me in to the overlay
 	Join { new_node: Id },
