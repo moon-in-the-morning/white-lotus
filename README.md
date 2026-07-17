@@ -56,5 +56,10 @@ the enum message is everything one node can say to another node - the node id an
   
 Membership
 
-Membership starts by defining a nodes hyparview membership state: the two and their size limits -  
+Membership starts by defining a nodes hyparview membership state: the two and their size limits - 
+
+Action.rs
+
+ Send carries a whole Message (reusing message.rs) plus who it goes to. Connect/Disconnect manage live links. Deliver hands a received payload up to your app.
+ 
  
