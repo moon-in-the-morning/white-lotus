@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::env;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 use white_lotus::{Action, Config, Message, Node};
 
@@ -9,7 +11,7 @@ use white_lotus::{Action, Config, Message, Node};
 type Announcement = String;
 
 fn main() {
-	// usage: node <my_id> <my_port> <peer_id> <peer_port> [broadcast_text]
+	// usage: node <my_id> <my_port> <peer_id> <peer_port>
 	let args: Vec<String> = env::args().collect();
 	let my_id: u32 = args[1].parse().unwrap();
 	let my_port: u16 = args[2].parse().unwrap();
@@ -19,27 +21,43 @@ fn main() {
 	// address book: which address to reach each peer on
 	let mut book: HashMap<u32, String> = HashMap::new();
 	book.insert(peer_id, format!("127.0.0.1:{peer_port}"));
+	let book = Arc::new(book);
 
-	// build the node and put the peer into its active view
+	// build the node, put the peer into its active view, then share it safely
+	// between the keyboard thread and the network thread with an Arc<Mutex<_>>.
 	let mut node: Node<u32> = Node::new(Config::new(my_id));
 	let _ = node.handle::<Announcement>(Message::Join { new_node: peer_id });
+	let node = Arc::new(Mutex::new(node));
 
-	// if a 6th argument was given, originate a broadcast of it
-	if let Some(text) = args.get(5) {
-		println!("[node {my_id}] broadcasting: {text}");
-		let actions = node.broadcast::<Announcement>(text.clone());
-		execute(&actions, &book);
+	// --- keyboard thread: read a typed line, broadcast it ---
+	{
+		let node = Arc::clone(&node);
+		let book = Arc::clone(&book);
+		thread::spawn(move || {
+			let stdin = std::io::stdin();
+			for line in stdin.lock().lines() {
+				let text = match line {
+					Ok(t) => t,
+					Err(_) => break,
+				};
+				if text.trim().is_empty() {
+					continue;
+				}
+				let actions = node.lock().unwrap().broadcast::<Announcement>(text);
+				execute(&actions, &book);
+			}
+		});
 	}
 
-	// listen for incoming messages forever
+	// --- network thread (main): accept messages and handle them ---
 	let listener = TcpListener::bind(format!("127.0.0.1:{my_port}")).unwrap();
-	println!("[node {my_id}] listening on 127.0.0.1:{my_port}");
+	println!("[node {my_id}] listening on 127.0.0.1:{my_port}  (type a message + Enter to send)");
 	for stream in listener.incoming() {
 		let mut reader = BufReader::new(stream.unwrap());
 		let mut line = String::new();
 		if reader.read_line(&mut line).is_ok() && !line.trim().is_empty() {
 			let msg: Message<u32, Announcement> = serde_json::from_str(line.trim()).unwrap();
-			let actions = node.handle(msg);
+			let actions = node.lock().unwrap().handle(msg);
 			execute(&actions, &book);
 		}
 	}
