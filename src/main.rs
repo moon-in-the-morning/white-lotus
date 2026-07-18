@@ -11,24 +11,29 @@ use white_lotus::{Action, Config, Message, Node};
 type Announcement = String;
 
 fn main() {
-	// usage: node <my_id> <my_port> <peer_id> <peer_host:port>
-	//   e.g. across machines:  node 1 9001 2 10.7.23.32:9002
-	//   e.g. on one machine:   node 1 9001 2 127.0.0.1:9002
+	// usage: node <my_id> <my_port> [<peer_id> <peer_host:port>]...
+	//   two peers:  node 1 9001 2 10.7.23.32:9002 3 10.7.23.33:9003
 	let args: Vec<String> = env::args().collect();
 	let my_id: u32 = args[1].parse().unwrap();
 	let my_port: u16 = args[2].parse().unwrap();
-	let peer_id: u32 = args[3].parse().unwrap();
-	let peer_addr: String = args[4].clone();
 
-	// address book: which address to reach each peer on
+	// build the node and its address book
 	let mut book: HashMap<u32, String> = HashMap::new();
-	book.insert(peer_id, peer_addr);
-	let book = Arc::new(book);
-
-	// build the node, put the peer into its active view, then share it safely
-	// between the keyboard thread and the network thread with an Arc<Mutex<_>>.
 	let mut node: Node<u32, Announcement> = Node::new(Config::new(my_id));
-	let _ = node.handle(Message::Join { new_node: peer_id });
+
+	// the remaining args are (peer_id  peer_host:port) pairs - one per peer
+	let mut i = 3;
+	while i + 1 < args.len() {
+		let peer_id: u32 = args[i].parse().unwrap();
+		let peer_addr: String = args[i + 1].clone();
+		book.insert(peer_id, peer_addr);
+		// put each peer into our active view so we forward to it
+		let _ = node.handle(Message::Join { new_node: peer_id });
+		i += 2;
+	}
+
+	// share both safely across the keyboard, ticker, and network threads
+	let book = Arc::new(book);
 	let node = Arc::new(Mutex::new(node));
 
 	// --- keyboard thread: read a typed line, broadcast it ---

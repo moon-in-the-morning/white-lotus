@@ -29,7 +29,7 @@ later we will deal with something called Locical Time- Logical time used in orde
 
 Thanks for entertaining my tangent - moving on back to the config at hand 
 
-One thing that config does is helps the node to determine how many peers a given message is distributed to - you can review this for yourself in Leitão's master's thesis §3.2.2, p.32 (João Leitão, "Gossip-Based Broadcast Protocols," MSc thesis, Faculdade de Ciências da Universidade de Lisboa, 2007)
+One thing that config does is helps the node to determine how many peers a given message is distributed to - you can review this for yourself in Leito's masters thesis §3.2.2, p.32 [add citation later]
 
 HyParView maintains activve peers and passive peers. Think of these like your emergecy contacts vs. your school or work friends. The active peers are the ones who a node maintains an open TCP connection to and the ones they always forward messages to. 
 Direct quote: "to allow the use of a fanout of t without sending the gossip message back to the same node from which the message was received... partial views should have a size of t + 1." One slot is reserved for "the peer I just heard it from" (forwarding back to them is a guaranteed-wasted message), the other t slots are who you forward to.
@@ -62,25 +62,9 @@ Action.rs
 
  Send carries a whole Message (reusing message.rs) plus who it goes to. Connect/Disconnect manage live links. Deliver hands a received payload up to your app.
 
-Broadcast (Plumtree)
+Broadcast
 
-Dissemination follows Plumtree — the "Epidemic Broadcast Trees" strategy from Leitão's thesis (§3.3 "Eager Push Strategy" and §3.4 "Tree Strategy", pp. 39–53; tree repair in §3.4.2.6 "Fault Tolerance And Tree Repair"), also published as: João Leitão, José Pereira & Luís Rodrigues, "Epidemic Broadcast Trees," IEEE SRDS 2007.
-
-The naive version is what we started with: when you get a message you shove the whole payload to every active peer except whoever gave it to you. Correct, but wasteful — every node receives the full bytes from each of its neighbors.
-
-Plumtree fixes that by splitting your active view into two sets and sending different things down each:
-  - eager peers get the FULL payload (these links form a spanning tree — efficient)
-  - lazy peers get only a tiny IHave(id) announcement (just "I have message X", not the bytes)
-
-Then the tree self-tunes with two control messages (thesis §3.4.2.6):
-  - PRUNE — if a node receives a payload it already had (a redundant eager delivery), it tells that sender "move me to lazy" → trims the tree
-  - GRAFT — if a node gets an IHave for a message it is missing (the tree had a gap because a node died), it asks that peer "send me the payload, and move me back to eager" → heals the tree
-
-Net result: flooding's reliability at a tree's efficiency. The payload travels mostly along tree edges, while the cheap IHave announcements provide the redundancy to recover from failures. This is exactly the strategy iroh-gossip (and therefore Nixie's lait) uses.
-
-One subtlety (thesis §3.4.2.5, "Announcement Policy"): a node does NOT GRAFT the instant an IHave arrives — the eager payload is usually just a beat behind. It starts a short grace-period timer instead; if the payload shows up first the timer is cancelled and the link stays lazy, and only if the deadline passes does it GRAFT (then a shorter retry tries the next announcer). Without this, every early IHave would re-promote a link to eager and the tree would never thin out. Time is passed in explicitly via tick(now) — the node never reads a clock itself — so the whole thing stays pure and testable, and the runtime (main.rs) drives it from a small ticker thread.
-
-In the code: broadcast.rs has eager_push (full payload) and lazy_push (IHave). gossip.rs holds the eager/lazy split (eager = active view minus a "lazy" set), a message cache (so it can answer a GRAFT with the real payload), the seen set (so it can tell "already have it" from "missing it"), and a "missing" queue of IHave'd-but-unarrived messages that tick(now) grafts once their deadline passes. The globally-unique (origin, seq) message ids are what make the have/missing distinction possible.
+HyParView — when you get a message, you shove it to everyone in your active view except whoever just gave it to you.
 
 gossip.rs
 All together now!  
@@ -124,3 +108,11 @@ For each new message type, there's a clear observable outcome:
 
 
 A Message is a Rust value in memory; to send it over TCP it has to become a stream of bytes, and become a Message again on the other end. The standard Rust tool for this is serde (serialize/deserialize), and we'll use JSON as the format at first because it's human-readable
+
+an example:
+How to read the command (so it's clear which is which)
+
+./target/debug/white-lotus  <my-id>  <my-port>  <peer-id>  <peer-address>
+                    Mac:        1        9001        2       10.7.23.32:9002  (the Pi)
+                    Pi:         2        9002        1       10.7.23.33:9001  (the Mac)
+
