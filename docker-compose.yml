@@ -1,0 +1,32 @@
+services:
+  tracker:
+    build: .
+    command: tracker 7000
+    networks: [mesh]
+
+  node1:
+    build: .
+    command: white-lotus 1 tracker:7000
+    depends_on: [tracker]
+    stdin_open: true
+    tty: true
+    networks: [mesh]
+
+  node2:
+    build: . 
+    command: white-lotus 2 tracker:7000
+    depends_on: [tracker]
+    stdin_open: true
+    networks: [mesh]
+
+  node3:
+    build: . 
+    command: white-lotus 3 tracker:7000
+    depends_on: [tracker]
+    stdin_open: true
+    tty: true
+    networks: [mesh]
+
+networks:
+  mesh:
+    driver: bridge
