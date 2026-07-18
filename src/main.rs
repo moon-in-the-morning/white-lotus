@@ -11,16 +11,18 @@ use white_lotus::{Action, Config, Message, Node};
 type Announcement = String;
 
 fn main() {
-	// usage: node <my_id> <my_port> <peer_id> <peer_port>
+	// usage: node <my_id> <my_port> <peer_id> <peer_host:port>
+	//   e.g. across machines:  node 1 9001 2 10.7.23.32:9002
+	//   e.g. on one machine:   node 1 9001 2 127.0.0.1:9002
 	let args: Vec<String> = env::args().collect();
 	let my_id: u32 = args[1].parse().unwrap();
 	let my_port: u16 = args[2].parse().unwrap();
 	let peer_id: u32 = args[3].parse().unwrap();
-	let peer_port: u16 = args[4].parse().unwrap();
+	let peer_addr: String = args[4].clone();
 
 	// address book: which address to reach each peer on
 	let mut book: HashMap<u32, String> = HashMap::new();
-	book.insert(peer_id, format!("127.0.0.1:{peer_port}"));
+	book.insert(peer_id, peer_addr);
 	let book = Arc::new(book);
 
 	// build the node, put the peer into its active view, then share it safely
@@ -65,8 +67,8 @@ fn main() {
 	}
 
 	// --- network thread (main): accept messages and handle them ---
-	let listener = TcpListener::bind(format!("127.0.0.1:{my_port}")).unwrap();
-	println!("[node {my_id}] listening on 127.0.0.1:{my_port}  (type a message + Enter to send)");
+	let listener = TcpListener::bind(format!("0.0.0.0:{my_port}")).unwrap();
+	println!("[node {my_id}] listening on 0.0.0.0:{my_port}  (type a message + Enter to send)");
 	for stream in listener.incoming() {
 		let mut reader = BufReader::new(stream.unwrap());
 		let mut line = String::new();
