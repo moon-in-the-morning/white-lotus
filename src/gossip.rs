@@ -6,6 +6,13 @@ use crate::message::{Message, MessageId};
 use crate::action::Action;
 use crate::broadcast;
 
+// A message we've heard about (via IHave) but don't have yet: who told us, and
+// when to GRAFT for it if the eager payload still hasn't arrived.
+struct Missing<Id> {
+	announcers: Vec<Id>,
+	deadline: u64,
+}
+
 // The whole node: config + membership + Plumtree broadcast state, tied together.
 // Generic over Id (who) and P (the payload we gossip). P is stored in the message
 // cache so the node can answer a Plumtree GRAFT by re-sending the real payload.
@@ -21,6 +28,12 @@ pub struct Node<Id: NodeId, P: Payload> {
 	// payloads we've delivered, kept so we can answer a GRAFT for them.
 	// TODO: this grows unbounded - real Plumtree bounds it to a recent window.
 	cache: HashMap<(Id, MessageId), P>,
+	// last time we were ticked; drives the GRAFT timers. Time is passed IN via
+	// tick(now) - the node never reads a clock itself (stays pure/testable).
+	now: u64,
+	// messages announced via IHave that we don't have yet, awaiting either the
+	// eager payload (cancels the timer) or a deadline (fires a GRAFT).
+	missing: HashMap<(Id, MessageId), Missing<Id>>,
 }
 
 impl<Id: NodeId, P: Payload> Node<Id, P> {
@@ -40,6 +53,8 @@ impl<Id: NodeId, P: Payload> Node<Id, P> {
 			next_seq: 0,
 			lazy: HashSet::new(),
 			cache: HashMap::new(),
+			now: 0,
+			missing: HashMap::new(),
 		}
 	}
 
@@ -77,6 +92,48 @@ impl<Id: NodeId, P: Payload> Node<Id, P> {
 		actions
 	}
 
+	// Advance the node's clock. Any message whose grace period has expired without
+	// the eager payload arriving gets a GRAFT to the peer that announced it.
+	pub fn tick(&mut self, now: u64) -> Vec<Action<Id, P>> {
+		self.now = now;
+		let mut actions = Vec::new();
+		let expired: Vec<(Id, MessageId)> = self
+			.missing
+			.iter()
+			.filter(|(_, m)| m.deadline <= now)
+			.map(|(id, _)| *id)
+			.collect();
+		for id in expired {
+			// Pull the next announcer to GRAFT (and arm a retry), or give up.
+			let peer = {
+				let m = self.missing.get_mut(&id).unwrap();
+				if m.announcers.is_empty() {
+					None
+				} else {
+					let p = m.announcers.remove(0);
+					m.deadline = now + self.config.graft_retry_timeout;
+					Some(p)
+				}
+			};
+			match peer {
+				Some(peer) => {
+					// Promote the link and ask for the payload.
+					self.lazy.remove(&peer);
+					let (origin, seq) = id;
+					actions.push(Action::Send {
+						to: peer,
+						msg: Message::Graft { origin, seq, sender: self.config.me },
+					});
+				}
+				None => {
+					// Exhausted every announcer - stop waiting.
+					self.missing.remove(&id);
+				}
+			}
+		}
+		actions
+	}
+
 	// React to any incoming message.
 	pub fn handle(&mut self, msg: Message<Id, P>) -> Vec<Action<Id, P>> {
 		match msg {
@@ -93,6 +150,8 @@ impl<Id: NodeId, P: Payload> Node<Id, P> {
 						msg: Message::Prune { sender: self.config.me },
 					}];
 				}
+				// The payload arrived: cancel any pending GRAFT timer for it.
+				self.missing.remove(&id);
 				self.cache.insert(id, payload.clone());
 				let mut actions = vec![Action::Deliver { payload: payload.clone() }];
 				// Stop forwarding once it has reached the hop limit.
@@ -114,15 +173,18 @@ impl<Id: NodeId, P: Payload> Node<Id, P> {
 					// Already have it - the lazy announcement is redundant.
 					Vec::new()
 				} else {
-					// Missing it: GRAFT the sender (promote link to eager) and ask
-					// for the payload.
-					// TODO: real Plumtree waits a short timer before grafting, to
-					// give the eager tree a chance; we graft immediately.
-					self.lazy.remove(&sender);
-					vec![Action::Send {
-						to: sender,
-						msg: Message::Graft { origin, seq, sender: self.config.me },
-					}]
+					// Don't GRAFT yet. Record the announcer and start a timer; the
+					// eager payload may still be on its way. tick() will GRAFT only
+					// if the deadline passes without it arriving (thesis 3.4.2.5/6).
+					let deadline = self.now + self.config.graft_timeout;
+					let entry = self.missing.entry(id).or_insert_with(|| Missing {
+						announcers: Vec::new(),
+						deadline,
+					});
+					if !entry.announcers.contains(&sender) {
+						entry.announcers.push(sender);
+					}
+					Vec::new()
 				}
 			}
 			Message::Graft { origin, seq, sender } => {

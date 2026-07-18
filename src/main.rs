@@ -49,6 +49,21 @@ fn main() {
 		});
 	}
 
+	// --- ticker thread: drive the Plumtree GRAFT timers ---
+	{
+		let node = Arc::clone(&node);
+		let book = Arc::clone(&book);
+		thread::spawn(move || {
+			let start = std::time::Instant::now();
+			loop {
+				thread::sleep(std::time::Duration::from_millis(50));
+				let now = start.elapsed().as_millis() as u64;
+				let actions = node.lock().unwrap().tick(now);
+				execute(&actions, &book);
+			}
+		});
+	}
+
 	// --- network thread (main): accept messages and handle them ---
 	let listener = TcpListener::bind(format!("127.0.0.1:{my_port}")).unwrap();
 	println!("[node {my_id}] listening on 127.0.0.1:{my_port}  (type a message + Enter to send)");

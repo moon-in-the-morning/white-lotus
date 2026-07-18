@@ -17,6 +17,11 @@ pub struct Config<Id> {
 	pub active_walk_length: u32,
 	//Passive Random Walk Length - hop at which a joining node enters the passive view (HyParView used 3)
 	pub passive_walk_length: u32,
+	//Plumtree: how long (in tick() time units) to wait for the eager payload
+	//before GRAFTing to fetch a message we only heard about via IHave
+	pub graft_timeout: u64,
+	//shorter wait before grafting the next announcer if the first GRAFT stays silent
+	pub graft_retry_timeout: u64,
 }
 
 impl<Id> Config<Id> { 
@@ -30,6 +35,8 @@ impl<Id> Config<Id> {
 			passive_capacity: 30,
 			active_walk_length: 6,
 			passive_walk_length: 3,
+			graft_timeout: 100,
+			graft_retry_timeout: 50,
 		}
 	}
 }

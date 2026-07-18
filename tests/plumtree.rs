@@ -18,15 +18,38 @@ fn duplicate_broadcast_triggers_prune() {
 		matches!(a, Action::Send { to, msg: Message::Prune { .. } } if *to == 2)));
 }
 
-// An IHave for a message we DON'T have => GRAFT the announcer to fetch it.
+// An IHave alone does NOT graft immediately - it starts a grace-period timer,
+// giving the eager tree a chance to deliver the payload first.
 #[test]
-fn ihave_for_missing_triggers_graft() {
+fn ihave_alone_does_not_graft() {
 	let mut node: Node<u32, u64> = Node::new(Config::new(1));
-
 	let actions = node.handle(Message::IHave { origin: 9, seq: 0, sender: 2 });
+	assert!(actions.is_empty());
+}
 
+// If the eager payload never arrives, ticking past the deadline fires a GRAFT.
+#[test]
+fn graft_fires_after_the_timer_expires() {
+	let mut node: Node<u32, u64> = Node::new(Config::new(1)); // graft_timeout = 100
+	node.handle(Message::IHave { origin: 9, seq: 0, sender: 2 });
+
+	// before the deadline: nothing
+	assert!(node.tick(50).is_empty());
+	// after the deadline: GRAFT the announcer
+	let actions = node.tick(150);
 	assert!(actions.iter().any(|a|
 		matches!(a, Action::Send { to, msg: Message::Graft { .. } } if *to == 2)));
+}
+
+// If the eager payload arrives before the timer, the pending GRAFT is cancelled.
+#[test]
+fn payload_before_deadline_cancels_the_graft() {
+	let mut node: Node<u32, u64> = Node::new(Config::new(1));
+	node.handle(Message::IHave { origin: 9, seq: 0, sender: 2 });
+	// the real payload shows up via the eager tree
+	node.handle(Message::Broadcast { origin: 9, seq: 0, sender: 3, hop: 0, payload: 42u64 });
+	// ticking past the old deadline now produces no GRAFT
+	assert!(node.tick(150).is_empty());
 }
 
 // An IHave for a message we ALREADY have => ignore it (no graft, no traffic).

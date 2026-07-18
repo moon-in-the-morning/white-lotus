@@ -78,7 +78,9 @@ Then the tree self-tunes with two control messages (thesis §3.4.2.6):
 
 Net result: flooding's reliability at a tree's efficiency. The payload travels mostly along tree edges, while the cheap IHave announcements provide the redundancy to recover from failures. This is exactly the strategy iroh-gossip (and therefore Nixie's lait) uses.
 
-In the code: broadcast.rs has eager_push (full payload) and lazy_push (IHave). gossip.rs holds the eager/lazy split (eager = active view minus a "lazy" set), a message cache (so it can answer a GRAFT with the real payload), and the seen set (so it can tell "already have it" from "missing it"). The globally-unique (origin, seq) message ids are what make that distinction possible.
+One subtlety (thesis §3.4.2.5, "Announcement Policy"): a node does NOT GRAFT the instant an IHave arrives — the eager payload is usually just a beat behind. It starts a short grace-period timer instead; if the payload shows up first the timer is cancelled and the link stays lazy, and only if the deadline passes does it GRAFT (then a shorter retry tries the next announcer). Without this, every early IHave would re-promote a link to eager and the tree would never thin out. Time is passed in explicitly via tick(now) — the node never reads a clock itself — so the whole thing stays pure and testable, and the runtime (main.rs) drives it from a small ticker thread.
+
+In the code: broadcast.rs has eager_push (full payload) and lazy_push (IHave). gossip.rs holds the eager/lazy split (eager = active view minus a "lazy" set), a message cache (so it can answer a GRAFT with the real payload), the seen set (so it can tell "already have it" from "missing it"), and a "missing" queue of IHave'd-but-unarrived messages that tick(now) grafts once their deadline passes. The globally-unique (origin, seq) message ids are what make the have/missing distinction possible.
 
 gossip.rs
 All together now!  
